@@ -7,6 +7,9 @@ class CulturalApp:
         self.page = None
         self.map_container = None
         self.recommendations = []
+        self.events = []
+        self.current_view = "main"  # "main", "events", "event_detail"
+        self.current_event = None
 
     def main(self, page: ft.Page):
         self.page = page
@@ -20,12 +23,13 @@ class CulturalApp:
 
         # Инициализация данных
         self.load_recommendations()
+        self.load_events()  # <-- добавлено
 
         # Создание интерфейса
         self.create_main_interface()
 
     def load_recommendations(self):
-        """Загрузка рекомендаций"""
+        """Загрузка рекомендаций с координатами"""
         self.recommendations = [
             {
                 "id": 1,
@@ -34,7 +38,9 @@ class CulturalApp:
                 "era": "XIX век",
                 "distance": "1.2 км",
                 "rating": 4.8,
-                "image": "🏛️"
+                "image": "🏛️",
+                "lat": 52.6338,
+                "lng": 54.1928
             },
             {
                 "id": 2,
@@ -42,8 +48,10 @@ class CulturalApp:
                 "type": "Парк",
                 "era": "Современность",
                 "distance": "0.8 км",
-                "rating": 4.6,
-                "image": "🌳"
+                "rating": 4.7,
+                "image": "🌳",
+                "lat": 52.6300,
+                "lng": 54.1950
             },
             {
                 "id": 3,
@@ -52,7 +60,9 @@ class CulturalApp:
                 "era": "XVIII век",
                 "distance": "2.1 км",
                 "rating": 4.9,
-                "image": "🏰"
+                "image": "🏰",
+                "lat": 52.6400,
+                "lng": 54.1880
             },
             {
                 "id": 4,
@@ -61,7 +71,47 @@ class CulturalApp:
                 "era": "XX век",
                 "distance": "1.5 км",
                 "rating": 4.7,
-                "image": "🖼️"
+                "image": "🖼️",
+                "lat": 52.6320,
+                "lng": 54.1900
+            }
+        ]
+
+    def load_events(self):
+        """Загрузка событий афиши"""
+        self.events = [
+            {
+                "id": 1,
+                "name": "Выставка современного искусства",
+                "date": "15 июня 2025, 18:00",
+                "location": "Галерея «Новое пространство»",
+                "description": "Погрузитесь в мир авангарда и инсталляций от молодых художников.",
+                "age_restriction": "12+",
+                "duration": "2 часа",
+                "created_at": "1 июня 2025",
+                "image": "https://forum.pears.fun/data/avatars/o/0/923.jpg?1718281430"
+            },
+            {
+                "id": 2,
+                "name": "Классический концерт в парке",
+                "date": "20 июня 2025, 19:00",
+                "location": "Центральный парк культуры",
+                "description": "Симфонический оркестр исполнит лучшие произведения Чайковского и Рахманинова под открытым небом.",
+                "age_restriction": "0+",
+                "duration": "1.5 часа",
+                "created_at": "5 июня 2025",
+                "image": "🎻"
+            },
+            {
+                "id": 3,
+                "name": "Театральная премьера: «Ревизор»",
+                "date": "25 июня 2025, 19:30",
+                "location": "Драматический театр им. Гоголя",
+                "description": "Современная интерпретация классической комедии Гоголя.",
+                "age_restriction": "16+",
+                "duration": "3 часа",
+                "created_at": "10 июня 2025",
+                "image": "🎭"
             }
         ]
 
@@ -242,49 +292,151 @@ class CulturalApp:
             width=400
         )
 
-    def create_map_section(self):
-        """Создание секции карты"""
-        # Заглушка для карты - в реальном приложении здесь будет интеграция с картографическим API
-        self.map_container = ft.Container(
-            content=ft.Column([
-                ft.Icon(ft.Icons.MAP, size=48, color=ft.Colors.GREY_400),
-                ft.Text(
-                    "Карта достопримечательностей",
-                    size=16,
-                    color=ft.Colors.GREY_600
-                ),
-                ft.FilledButton(
-                    "Открыть карту",
-                    icon=ft.Icons.OPEN_IN_FULL,
-                    on_click=self.open_full_map
-                )
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            bgcolor=ft.Colors.GREY_100,
-            alignment=ft.alignment.center,
-            expand=True,
-            on_click=self.open_full_map
-        )
-        return self.map_container
-
     def create_main_interface(self):
-        """Создание основного интерфейса"""
-        main_content = ft.Row([
-            # Карта
-            ft.Container(
-                content=self.create_map_section(),
-                expand=True
-            ),
-            # Рекомендации
-            self.create_recommendations_section()
-        ], expand=True)
+        """Создание основного интерфейса с поддержкой вкладок"""
+        self.main_content = ft.Container(expand=True)
 
         self.page.add(
             ft.Column([
                 self.create_header(),
-                main_content,
+                self.main_content,
                 self.create_navigation()
             ], expand=True)
         )
+
+        # Отображаем начальный экран (Карта + Рекомендации)
+        self.show_main_screen()
+
+    def create_event_card(self, event):
+        """Создание карточки события с изображением и наложенным текстом"""
+        # Используем Stack для наложения текста поверх изображения
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Stack(
+                    controls=[
+                        # Фон (заглушка под изображение)
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Image(src=event["image"], fit=ft.ImageFit.COVER, expand=True, width=float("inf"), height=float("inf") ),
+                            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                            bgcolor=ft.Colors.GREY_100,
+                            expand=True,
+                            alignment=ft.alignment.center
+                            # 🔥 Закруглённые углы:
+                            
+                        ),
+                        # Полупрозрачный затемняющий слой
+                        ft.Container(
+                            bgcolor=ft.Colors.BLACK54,
+                            expand=True
+                        ),
+                        # Текст поверх
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Text(
+                                    event["name"],
+                                    size=16,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.WHITE,
+                                    max_lines=2,
+                                    overflow=ft.TextOverflow.ELLIPSIS
+                                ),
+                                ft.Text(
+                                    f"📅 {event['date']}",
+                                    size=12,
+                                    color=ft.Colors.WHITE70
+                                ),
+                                ft.Text(
+                                    f"📍 {event['location']}",
+                                    size=12,
+                                    color=ft.Colors.WHITE70
+                                ),
+                                ft.Container(
+                                    content=ft.Text(
+                                        event["age_restriction"],
+                                        size=10,
+                                        color=ft.Colors.RED_200,
+                                        weight=ft.FontWeight.BOLD
+                                    ),
+                                    bgcolor=ft.Colors.RED_800,
+                                    border_radius=4,
+                                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                                    margin=ft.margin.only(top=4)
+                                    
+                                )
+                            ], spacing=4),
+                            padding=12,
+                            alignment=ft.alignment.bottom_left,
+                            expand=True
+                        )
+                    ]
+                ),
+                height=200,  # фиксированная высота для единообразия
+                on_click=lambda e, ev=event: self.open_event_detail(ev)
+            ),
+            elevation=3,
+            margin=ft.margin.symmetric(vertical=6, horizontal=4),
+            shape=ft.RoundedRectangleBorder(radius=16),  # ← закруглённые углы
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,  # ← ОБЯЗАТЕЛЬНО!
+        )
+
+    def create_events_section(self):
+        """Создание секции афиши"""
+        return ft.Container(
+            content=ft.Column([
+                ft.Text(
+                    "Афиша событий",
+                    size=20,
+                    weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER
+                ),
+                ft.Column([
+                    self.create_event_card(event) for event in self.events
+                ], spacing=8, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+            ], spacing=12, expand=True),
+            padding=16,
+            bgcolor=ft.Colors.WHITE,
+            expand=True
+        )
+
+    def show_main_screen(self):
+        """Отображение основного экрана (Карта + Рекомендации)"""
+        main_content = ft.Row([
+            self.create_recommendations_section()
+        ], expand=True)
+        self.main_content.content = main_content
+        self.page.update()
+
+    def show_events_screen(self):
+        """Отображение экрана афиши"""
+        self.current_view = "events"
+        self.main_content.content = self.create_events_section()
+        self.page.update()
+
+    def show_catalog_screen(self):
+        """Заглушка для каталога"""
+        self.main_content.content = ft.Container(
+            content=ft.Text("Каталог достопримечательностей", size=20),
+            alignment=ft.alignment.center,
+            expand=True
+        )
+        self.page.update()
+
+    def show_favorites_screen(self):
+        self.main_content.content = ft.Container(
+            content=ft.Text("Избранное", size=20),
+            alignment=ft.alignment.center,
+            expand=True
+        )
+        self.page.update()
+
+    def show_routes_screen(self):
+        self.main_content.content = ft.Container(
+            content=ft.Text("Маршруты", size=20),
+            alignment=ft.alignment.center,
+            expand=True
+        )
+        self.page.update()
 
     # Обработчики событий
     def on_search_change(self, e):
@@ -301,9 +453,17 @@ class CulturalApp:
 
     def on_nav_click(self, e, index):
         """Обработчик клика по навигации"""
-        print(f"Навигация: {index}")
-        # Обновляем активное состояние кнопок
-        self.update_navigation_state(index)
+        self.current_event = None  # ← сброс деталей события при смене вкладки
+        if index == 0:  # Карта
+            self.show_main_screen()
+        elif index == 1:  # Каталог
+            self.show_catalog_screen()
+        elif index == 2:  # Афиша
+            self.show_events_screen()
+        elif index == 3:  # Избранное
+            self.show_favorites_screen()
+        elif index == 4:  # Маршруты
+            self.show_routes_screen()
 
     def update_navigation_state(self, active_index):
         """Обновление состояния навигации"""
@@ -322,6 +482,144 @@ class CulturalApp:
         """Открытие полной карты"""
         print("Открытие полной карты")
 
+    def open_event_detail(self, event):
+        """Переключиться на полноэкранный экран деталей события"""
+        self.current_event = event
+        self.current_view = "event_detail"
+        self.show_event_detail_screen()
+
+    def show_event_detail_screen(self):
+        image_ref = ft.Ref[ft.Container]()
+        initial_height = 280
+        min_height = 60  # ← минимальная высота при полном скролле
+
+        def on_scroll(e):
+            scroll_offset = e.pixels
+            # Чем больше скролл — тем меньше изображение
+            new_height = max(min_height, initial_height - scroll_offset * 0.7)  # коэффициент 0.7 для более агрессивного сжатия
+            image_ref.current.height = new_height
+
+            # Обновляем видимость названия: при маленькой высоте — показываем поверх
+            if new_height <= 80:
+                title_overlay.visible = True
+                title_main.visible = False
+            else:
+                title_overlay.visible = False
+                title_main.visible = True
+
+            self.page.update()
+
+        # Название для "большого" режима (под изображением)
+        title_main = ft.Container(
+            content=ft.Text(self.current_event["name"], size=24, weight=ft.FontWeight.BOLD),
+            padding=ft.padding.only(left=16, right=16, top=16),
+            visible=True
+        )
+
+        # Название для "маленького" режима (поверх изображения)
+        title_overlay = ft.Container(
+            content=ft.Row([
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    icon_color=ft.Colors.WHITE,
+                    on_click=self.go_back_to_events
+                ),
+                ft.Text(
+                    self.current_event["name"],
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE,
+                    expand=True,
+                    text_align=ft.TextAlign.CENTER
+                ),
+                ft.Container(width=48)  # балансировка ширины кнопки
+            ]),
+            padding=8,
+            visible=False,
+            alignment=ft.alignment.center
+        )
+
+        # Изображение с наложенным названием (для компактного режима)
+        image_container = ft.Container(
+            content=ft.Stack([
+                ft.Image(
+                    src=self.current_event["image"],
+                    fit=ft.ImageFit.COVER,
+                    width=float("inf"),
+                    height=initial_height
+                ),
+                title_overlay  # ← будет появляться при сжатии
+            ]),
+            height=initial_height,
+            ref=image_ref,
+            border_radius=ft.border_radius.only(bottom_left=24, bottom_right=24) if initial_height > 100 else ft.border_radius.all(0)
+        )
+
+        info_content = ft.Column([
+            title_main,  # ← видно только в раскрытом режиме
+            ft.Divider(height=10),
+            ft.ListTile(
+                leading=ft.Icon(ft.Icons.CALENDAR_MONTH, color=ft.Colors.GREY_600),
+                title=ft.Text(f"Дата: {self.current_event['date']}")
+            ),
+            ft.ListTile(
+                leading=ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.GREY_600),
+                title=ft.Text(f"Место: {self.current_event['location']}")
+            ),
+            ft.ListTile(
+                leading=ft.Text("🔞", size=18),
+                title=ft.Text(f"Возраст: {self.current_event['age_restriction']}")
+            ),
+            ft.ListTile(
+                leading=ft.Icon(ft.Icons.TIMER, color=ft.Colors.GREY_600),
+                title=ft.Text(f"Длительность: {self.current_event['duration']}")
+            ),
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Text("Описание", size=18, weight=ft.FontWeight.BOLD),
+                        padding=ft.padding.only(left=16, top=16)
+                    ),
+                    ft.Container(
+                        content=ft.Text(self.current_event["description"]),
+                        padding=ft.padding.only(left=16, right=16)
+                    ),
+                    ft.Divider(),
+                    ft.Container(
+                        content=ft.Text(
+                            f"Добавлено: {self.current_event['created_at']}",
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                            italic=True
+                        ),
+                        padding=ft.padding.only(left=16, top=8)
+                    )
+                ], spacing=8),
+                bgcolor=ft.Colors.WHITE,
+                expand=True
+            ),
+            ft.Container(
+                content=ft.FilledButton("← Назад к афише", on_click=self.go_back_to_events),
+                padding=16
+            )
+        ], spacing=0, tight=True)
+
+        scroll_view = ft.ListView(
+            controls=[
+                image_container,
+                info_content
+            ],
+            expand=True,
+            on_scroll=on_scroll
+        )
+
+        self.main_content.content = scroll_view
+        self.page.update()
+    
+    def go_back_to_events(self, e):
+        """Вернуться к списку событий (афише)"""
+        self.current_event = None
+        self.show_events_screen()
 
 # JavaScript функции для интеграции (для будущего использования)
 js_functions = """
