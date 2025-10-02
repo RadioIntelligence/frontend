@@ -8,6 +8,35 @@ class CulturalApp:
         self.map_container = None
         self.recommendations = []
         self.api_base_url = "http://localhost:8000"  # URL твоего FastAPI
+        self.access_token = None  # <-- НОВОЕ
+
+    def login(self, username: str, password: str):
+        """Отправка запроса на логин"""
+        response = requests.post(
+            f"{self.api_base_url}/auth/login",
+            data={
+                "username": username,
+                "password": password
+            }
+        )
+        if response.status_code == 200:
+            data = response.json()
+            self.access_token = data["access_token"]
+            return True
+        return False
+
+    def fetch_recommendations(self):
+        """Запрос к защищённому эндпоинту"""
+        headers = {}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        try:
+            response = requests.get(f"{self.api_base_url}/recommendations", headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f'Error fetching recommendations: {e}')
+            return []
 
     def main(self, page: ft.Page):
         self.page = page
