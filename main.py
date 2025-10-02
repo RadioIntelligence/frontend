@@ -1,12 +1,13 @@
 import flet as ft
 import json
-
+import requests  # для запросов к API
 
 class CulturalApp:
     def __init__(self):
         self.page = None
         self.map_container = None
         self.recommendations = []
+        self.api_base_url = "http://localhost:8000"  # URL твоего FastAPI
 
     def main(self, page: ft.Page):
         self.page = page
@@ -321,6 +322,64 @@ class CulturalApp:
     def open_full_map(self, e):
         """Открытие полной карты"""
         print("Открытие полной карты")
+        # Инициализация карты
+        map_api = self.initialize_map("map-container", {"center": [52.970756, 36.064358], "zoom": 12}) # МЕТКА ЦЕНТРА ОРЛА
+        # Пример добавления маркера
+        
+        map_api['add_marker'](52.962197, 36.064894, "Памятник Н. С. Лескову")
+        map_api['add_marker'](52.961665, 36.065917, "Памятник А. П. Ермолову")
+        map_api['add_marker'](52.967952, 36.064322, " Академический театр им. И.С. Тургенева")
+        map_api['add_marker'](52.956389, 36.055278, "Гостиный Двор")
+        map_api['add_marker'](52.96188, 36.06356, "Собор Михаила Архангела")
+        
+        # ЦЕНТРАЛЬНЫЙ МАРКЕР 
+        
+        map_api['set_center'](52.970756, 36.064358)
+
+
+  # --- Добавим Python-аналоги JS-функций ---
+    def initialize_map(self, container_id, options=None):
+        """
+        Инициализация карты (пока просто заглушка)
+        В реальности тут будет интеграция с картой (WebView, Leaflet, и т.д.)
+        """
+        print(f'Initializing map in: {container_id}')
+        return {
+            'add_marker': self.add_marker,
+            'set_center': self.set_center
+        }
+
+    def add_marker(self, lat, lng, title):
+        print(f'Adding marker: {lat}, {lng}, {title}')
+        # Здесь в будущем можно обновлять UI или отправлять в API
+
+    def set_center(self, lat, lng):
+        print(f'Setting center: {lat}, {lng}')
+
+    async def fetch_recommendations(self):
+        """
+        Асинхронный запрос к API за рекомендациями
+        """
+        try:
+            response = requests.get(f"{self.api_base_url}/recommendations")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f'Error fetching recommendations: {e}')
+            return []
+
+    async def search_places(self, query, filters=None):
+        """
+        Асинхронный запрос к API для поиска мест
+        """
+        try:
+            payload = {"query": query, "filters": filters or {}}
+            response = requests.post(f"{self.api_base_url}/search", json=payload)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f'Error searching places: {e}')
+            return []
 
 
 # JavaScript функции для интеграции (для будущего использования)
@@ -370,4 +429,5 @@ async function searchPlaces(query, filters) {
 # Запуск приложения
 if __name__ == "__main__":
     app = CulturalApp()
+
     ft.app(target=app.main)
