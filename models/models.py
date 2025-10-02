@@ -30,3 +30,14 @@ class Event:
     duration: str
     created_at: str
     image: str
+
+@dataclass
+class UserProfile:
+    name: str = "Пользователь"
+    email: str = "user@example.com"
+    phone: str = "+7 (XXX) XXX-XX-XX"
+    bio: str = "Люблю путешествовать и открывать новые места!"
+    registration_date: str = "2024"
+    favorites_count: int = 5
+    visited_count: int = 12
+    reviews_count: int = 3

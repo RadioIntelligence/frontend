@@ -5,6 +5,10 @@ from views.catalog_view import CatalogView
 from views.events_view import EventsView
 from views.favorites_view import FavoritesView
 from views.routes_view import RoutesView
+from views.auth_view import AuthView
+from views.profile_view import ProfileView
+from services.auth_service import AuthService
+from services.map_service import MapService
 from models.models import Place, Event
 
 class CulturalApp:
@@ -12,14 +16,31 @@ class CulturalApp:
         self.page = None
         self.places = []
         self.events = []
-        self.current_view = "map"
+        self.current_view = "auth"
         self.current_place = None
         self.current_event = None
+        self.full_screen_map = False
+        
+        # Инициализация сервисов
+        self.auth_service = AuthService()
+        self.map_service = MapService()
         
         # Инициализация вьюшек
+        self.auth_view = AuthView(
+            auth_service=self.auth_service,
+            on_login_success=self.on_login_success,
+            on_show_register=self.show_register_screen,
+            on_show_login=self.show_login_screen
+        )
+        self.profile_view = ProfileView(
+            auth_service=self.auth_service,
+            on_logout=self.logout,
+            on_back=self.go_back_to_main
+        )
         self.map_view = MapView(
+            map_service=self.map_service,
             on_place_click=self.open_place_detail,
-            on_full_map_click=self.open_full_map
+            on_full_map_click=self.toggle_full_map
         )
         self.catalog_view = CatalogView(on_place_click=self.open_place_detail)
         self.events_view = EventsView(
@@ -42,11 +63,43 @@ class CulturalApp:
         page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
         page.vertical_alignment = ft.MainAxisAlignment.START
 
-        # Загрузка данных
+        # Устанавливаем страницу в auth_view
+        self.auth_view.set_page(page)
+
+        # Проверка аутентификации
+        if self.auth_service.is_authenticated():
+            self.load_data()
+            self.create_main_interface()
+            self.switch_view("map")
+        else:
+            self.show_login_screen()
+
+    def show_login_screen(self):
+        """Показать экран входа"""
+        self.current_view = "auth"
+        self.page.clean()
+        login_view = self.auth_view.create_login_view()
+        self.page.add(login_view)
+        self.page.update()
+
+    def show_register_screen(self):
+        """Показать экран регистрации"""
+        self.current_view = "auth"
+        self.page.clean()
+        register_view = self.auth_view.create_register_view()
+        self.page.add(register_view)
+        self.page.update()
+
+    def on_login_success(self):
+        """Обработчик успешного входа"""
+        self.load_data()
+        self.create_main_interface()
+        self.switch_view("map")
+
+    def load_data(self):
+        """Загрузка данных"""
         self.places = load_places()
         self.events = load_events()
-
-        self.create_main_interface()
 
     def create_search_bar(self):
         """Создание поисковой строки"""
@@ -180,15 +233,19 @@ class CulturalApp:
             self.create_navigation()
         ], spacing=0, expand=True)
         
+        self.page.clean()
         self.page.add(main_layout)
-        self.switch_view("map")
+        self.page.update()
 
     def switch_view(self, view_name: str, data=None):
         """Переключение между видами"""
         self.current_view = view_name
         
         if view_name == "map":
-            self.content_area.content = self.map_view.create_view(self.places)
+            if self.full_screen_map:
+                self.content_area.content = self.map_view.create_view(self.places, full_screen=True)
+            else:
+                self.content_area.content = self.map_view.create_view(self.places)
         elif view_name == "catalog":
             self.content_area.content = self.catalog_view.create_view(self.places)
         elif view_name == "events":
@@ -197,6 +254,8 @@ class CulturalApp:
             self.content_area.content = self.favorites_view.create_view()
         elif view_name == "routes":
             self.content_area.content = self.routes_view.create_view()
+        elif view_name == "profile":
+            self.content_area.content = self.profile_view.create_profile_view()
         elif view_name == "place_detail" and data:
             self.current_place = data
             self.content_area.content = self.create_place_detail_view(data)
@@ -207,145 +266,42 @@ class CulturalApp:
             )
         
         # Обновляем навигацию
-        self.page.controls[0].controls[2] = self.create_navigation()
+        if self.page.controls and len(self.page.controls[0].controls) > 2:
+            self.page.controls[0].controls[2] = self.create_navigation()
         self.page.update()
 
-    def create_place_detail_view(self, place: Place):
-        """Создание детального просмотра места"""
-        return ft.Column([
-            ft.Container(
-                content=ft.Row([
-                    ft.IconButton(
-                        icon=ft.Icons.ARROW_BACK,
-                        on_click=lambda e: self.switch_view("catalog"),
-                        icon_size=24,
-                        style=ft.ButtonStyle(padding=ft.padding.all(8))
-                    ),
-                    ft.Text(place.title, size=18, weight=ft.FontWeight.BOLD, expand=True),
-                    ft.IconButton(
-                        icon=ft.Icons.FAVORITE_BORDER,
-                        on_click=lambda e: self.toggle_favorite(place.id),
-                        icon_size=24,
-                        style=ft.ButtonStyle(padding=ft.padding.all(8))
-                    )
-                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=ft.padding.symmetric(vertical=8, horizontal=12),
-                bgcolor=ft.Colors.WHITE,
-                border=ft.border.only(bottom=ft.BorderSide(color=ft.Colors.GREY_200, width=1))
-            ),
-            ft.Container(
-                content=self.create_place_detail_content(place),
-                expand=True
-            )
-        ])
+    def open_profile(self, e):
+        """Открытие страницы профиля"""
+        self.switch_view("profile")
 
-    def create_place_detail_content(self, place: Place):
-        """Создание содержимого детальной страницы"""
-        return ft.ListView(
-            controls=[
-                ft.Container(
-                    content=ft.Image(
-                        src=place.image,
-                        fit=ft.ImageFit.COVER,
-                        width=float("inf"),
-                        height=250,
-                    ),
-                    alignment=ft.alignment.center,
-                    bgcolor=ft.Colors.GREY_300,
-                    border_radius=12,
-                    height=250,
-                    clip_behavior=ft.ClipBehavior.HARD_EDGE
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.CATEGORY, size=20),
-                            title=ft.Text("Тип", size=12, color=ft.Colors.GREY_600),
-                            subtitle=ft.Text(place.type, size=14)
-                        ),
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.STAR, size=20),
-                            title=ft.Text("Рейтинг", size=12, color=ft.Colors.GREY_600),
-                            subtitle=ft.Text(f"{place.rating} ⭐", size=14)
-                        ),
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.LOCATION_ON, size=20),
-                            title=ft.Text("Адрес", size=12, color=ft.Colors.GREY_600),
-                            subtitle=ft.Text(place.address, size=14)
-                        ),
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.ACCESS_TIME, size=20),
-                            title=ft.Text("Время работы", size=12, color=ft.Colors.GREY_600),
-                            subtitle=ft.Text(place.working_hours, size=14)
-                        ),
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.ATTACH_MONEY, size=20),
-                            title=ft.Text("Стоимость", size=12, color=ft.Colors.GREY_600),
-                            subtitle=ft.Text(place.price, size=14)
-                        ),
-                    ], spacing=0),
-                    padding=ft.padding.symmetric(vertical=8)
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Описание", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_800),
-                        ft.Container(height=8),
-                        ft.Text(place.description, size=14, color=ft.Colors.GREY_700)
-                    ]),
-                    padding=16,
-                    bgcolor=ft.Colors.GREY_50
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Контакты", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_800),
-                        ft.Container(height=12),
-                        ft.Row([
-                            ft.Icon(ft.Icons.PHONE, size=18, color=ft.Colors.GREY_600),
-                            ft.Container(width=12),
-                            ft.Text(place.phone, size=14, expand=True)
-                        ]),
-                        ft.Container(height=8),
-                        ft.Row([
-                            ft.Icon(ft.Icons.LANGUAGE, size=18, color=ft.Colors.GREY_600),
-                            ft.Container(width=12),
-                            ft.Text(place.website, size=14, expand=True)
-                        ])
-                    ]),
-                    padding=16
-                ),
-                ft.Container(
-                    content=ft.Row([
-                        ft.FilledButton(
-                            "Построить маршрут",
-                            icon=ft.Icons.DIRECTIONS,
-                            on_click=lambda e: self.build_route(place),
-                            expand=True,
-                            style=ft.ButtonStyle(padding=ft.padding.symmetric(vertical=16))
-                        ),
-                    ]),
-                    padding=16
-                ),
-                ft.Container(height=20)
-            ],
-            spacing=0,
-            padding=0
-        )
+    def go_back_to_main(self, e=None):
+        """Возврат к главному экрану"""
+        self.switch_view("map")
 
-    # Обработчики событий
+    def logout(self, e=None):
+        """Выход из системы"""
+        self.auth_service.logout()
+        self.show_login_screen()
+
+    def toggle_full_map(self, e=None):
+        """Переключение режима полноэкранной карты"""
+        self.full_screen_map = not self.full_screen_map
+        self.switch_view("map")
+
+    # ... остальные методы (create_place_detail_view, обработчики событий) ...
+
     def on_nav_click(self, e, view):
         """Обработчик клика по навигации"""
+        self.full_screen_map = False
         self.switch_view(view)
 
     def open_place_detail(self, place: Place):
-        """Открыть детальную информацию о месте"""
         self.switch_view("place_detail", place)
 
     def open_event_detail(self, event: Event):
-        """Открыть детальную информацию о событии"""
         self.switch_view("event_detail", event)
 
     def go_back_to_events(self, e):
-        """Вернуться к списку событий"""
         self.switch_view("events")
 
     def on_search_change(self, e):
@@ -354,17 +310,11 @@ class CulturalApp:
     def open_filters(self, e):
         print("Открытие фильтров")
 
-    def open_profile(self, e):
-        print("Открытие профиля")
-
     def toggle_favorite(self, place_id):
         print(f"Избранное: {place_id}")
 
     def build_route(self, place):
         print(f"Построение маршрута к: {place.title}")
-
-    def open_full_map(self, e):
-        print("Открытие полной карты")
 
 if __name__ == "__main__":
     app = CulturalApp()
