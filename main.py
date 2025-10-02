@@ -1,17 +1,133 @@
+# frontend_main.py
+# Импорты необходимых библиотек
 import flet as ft
 import json
-import requests  # для запросов к API
+import requests  # для отправки HTTP-запросов к API
 
+# === Основной класс приложения ===
 class CulturalApp:
+    """
+    Класс, управляющий логикой и интерфейсом Flet-приложения.
+    Содержит методы для отображения экранов, работы с API и аутентификации.
+    """
     def __init__(self):
-        self.page = None
-        self.map_container = None
-        self.recommendations = []
-        self.api_base_url = "http://localhost:8000"  # URL твоего FastAPI
-        self.access_token = None  # <-- НОВОЕ
+        """
+        Инициализация приложения.
+        """
+        self.page = None  # будет установлено при запуске
+        self.map_container = None  # контейнер для карты
+        self.recommendations = []  # список достопримечательностей
+        self.api_base_url = "http://localhost:8000"  # URL вашего FastAPI-сервера
+        self.access_token = None  # токен аутентификации (None, если не вошёл)
 
+    # === Основной метод запуска приложения ===
+    def main(self, page: ft.Page):
+        """
+        Основная точка входа для Flet-приложения.
+        Здесь устанавливаются настройки страницы и проверяется аутентификация.
+        """
+        self.page = page
+        # Настройка внешнего вида
+        page.title = "Культурный гид"
+        page.theme_mode = ft.ThemeMode.LIGHT
+        page.padding = 0
+        page.fonts = {
+            "Roboto": "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+        }
+        page.theme = ft.Theme(font_family="Roboto")
+
+        # === Проверка аутентификации ===
+        # Если токен уже есть (например, из кэша), сразу показываем основной интерфейс
+        # В данном примере токен хранится в памяти Python, но в реальном приложении
+        # его можно сохранять в файл, SQLite и т.д.
+        if self.access_token:
+            self.create_main_interface()
+        else:
+            # Если токена нет — показываем экран логина
+            self.show_login_screen()
+
+    # === Экраны аутентификации ===
+    def show_login_screen(self):
+        """
+        Отображает экран логина.
+        Пользователь вводит логин и пароль, затем отправляет запрос на API.
+        """
+        # Поля ввода
+        username_field = ft.TextField(label="Имя пользователя")
+        password_field = ft.TextField(label="Пароль", password=True)
+
+        def on_login_click(e):
+            """
+            Обработчик нажатия на кнопку "Войти".
+            Отправляет данные на бэкенд и сохраняет токен при успехе.
+            """
+            username = username_field.value
+            password = password_field.value
+            if self.login(username, password):
+                # Если логин успешен — очищаем экран и показываем основной интерфейс
+                self.page.clean()
+                self.create_main_interface()
+            else:
+                # Иначе — показываем ошибку
+                self.page.add(ft.Text("Неверный логин или пароль", color=ft.Colors.RED))
+
+        # Очищаем текущую страницу и добавляем элементы логина
+        self.page.clean()
+        self.page.add(
+            ft.Column([
+                ft.Text("Вход", size=24, weight=ft.FontWeight.BOLD),
+                username_field,
+                password_field,
+                ft.ElevatedButton("Войти", on_click=on_login_click),
+                # Кнопка "Регистрация" — переход на экран регистрации
+                ft.TextButton("Регистрация", on_click=self.show_register_screen)
+            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        )
+
+    def show_register_screen(self, e):
+        """
+        Отображает экран регистрации.
+        Пользователь вводит логин и пароль, затем отправляет запрос на API.
+        """
+        username_field = ft.TextField(label="Имя пользователя")
+        password_field = ft.TextField(label="Пароль", password=True)
+
+        def on_register_click(e):
+            """
+            Обработчик нажатия на кнопку "Зарегистрироваться".
+            """
+            username = username_field.value
+            password = password_field.value
+            if self.register(username, password):
+                # Если регистрация успешна — показываем сообщение
+                self.page.add(ft.Text("Успешно зарегистрированы!", color=ft.Colors.GREEN))
+                # После регистрации автоматически логинимся
+                if self.login(username, password):
+                    self.page.clean()
+                    self.create_main_interface()
+            else:
+                # Иначе — ошибка
+                self.page.add(ft.Text("Ошибка регистрации", color=ft.Colors.RED))
+
+        # Очищаем страницу и показываем поля регистрации
+        self.page.clean()
+        self.page.add(
+            ft.Column([
+                ft.Text("Регистрация", size=24, weight=ft.FontWeight.BOLD),
+                username_field,
+                password_field,
+                ft.ElevatedButton("Зарегистрироваться", on_click=on_register_click),
+                # Кнопка "Назад" — возвращаемся к экрану логина
+                ft.TextButton("Назад", on_click=lambda e: self.show_login_screen())
+            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        )
+
+    # === Методы аутентификации (вызов API) ===
     def login(self, username: str, password: str):
-        """Отправка запроса на логин"""
+        """
+        Отправляет запрос на бэкенд для аутентификации.
+        Если успех — сохраняет токен.
+        """
         response = requests.post(
             f"{self.api_base_url}/auth/login",
             data={
@@ -25,37 +141,24 @@ class CulturalApp:
             return True
         return False
 
-    def fetch_recommendations(self):
-        """Запрос к защищённому эндпоинту"""
-        headers = {}
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
-        try:
-            response = requests.get(f"{self.api_base_url}/recommendations", headers=headers)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f'Error fetching recommendations: {e}')
-            return []
+    def register(self, username: str, password: str):
+        """
+        Отправляет запрос на бэкенд для регистрации.
+        """
+        response = requests.post(
+            f"{self.api_base_url}/auth/register",
+            json={
+                "username": username,
+                "password": password
+            }
+        )
+        return response.status_code == 200
 
-    def main(self, page: ft.Page):
-        self.page = page
-        page.title = "Культурный гид"
-        page.theme_mode = ft.ThemeMode.LIGHT
-        page.padding = 0
-        page.fonts = {
-            "Roboto": "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
-        }
-        page.theme = ft.Theme(font_family="Roboto")
-
-        # Инициализация данных
-        self.load_recommendations()
-
-        # Создание интерфейса
-        self.create_main_interface()
-
+    # === Основной интерфейс приложения (после аутентификации) ===
     def load_recommendations(self):
-        """Загрузка рекомендаций"""
+        """
+        Загружает список достопримечательностей (в реальном приложении — с API).
+        """
         self.recommendations = [
             {
                 "id": 1,
@@ -96,7 +199,9 @@ class CulturalApp:
         ]
 
     def create_search_bar(self):
-        """Создание поисковой строки"""
+        """
+        Создаёт строку поиска в заголовке.
+        """
         return ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.SEARCH, color=ft.Colors.GREY_600),
@@ -126,7 +231,9 @@ class CulturalApp:
         )
 
     def create_header(self):
-        """Создание заголовка"""
+        """
+        Создаёт заголовок приложения (с логотипом, строкой поиска и профилем).
+        """
         return ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -155,7 +262,9 @@ class CulturalApp:
         )
 
     def create_navigation(self):
-        """Создание навигации"""
+        """
+        Создаёт нижнюю панель навигации.
+        """
         nav_items = [
             {"icon": ft.Icons.MAP, "label": "Карта", "active": True},
             {"icon": ft.Icons.EXPLORE, "label": "Каталог"},
@@ -163,7 +272,6 @@ class CulturalApp:
             {"icon": ft.Icons.FAVORITE, "label": "Избранное"},
             {"icon": ft.Icons.ROUTE, "label": "Маршруты"}
         ]
-
         return ft.Container(
             content=ft.Row([
                 ft.Container(
@@ -196,7 +304,9 @@ class CulturalApp:
         )
 
     def create_recommendation_card(self, item):
-        """Создание карточки рекомендации"""
+        """
+        Создаёт карточку достопримечательности.
+        """
         return ft.Card(
             content=ft.Container(
                 content=ft.Column([
@@ -249,7 +359,9 @@ class CulturalApp:
         )
 
     def create_recommendations_section(self):
-        """Создание секции рекомендаций"""
+        """
+        Создаёт секцию с рекомендациями (список карточек).
+        """
         return ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -273,8 +385,9 @@ class CulturalApp:
         )
 
     def create_map_section(self):
-        """Создание секции карты"""
-        # Заглушка для карты - в реальном приложении здесь будет интеграция с картографическим API
+        """
+        Создаёт секцию с картой (в виде заглушки).
+        """
         self.map_container = ft.Container(
             content=ft.Column([
                 ft.Icon(ft.Icons.MAP, size=48, color=ft.Colors.GREY_400),
@@ -297,17 +410,18 @@ class CulturalApp:
         return self.map_container
 
     def create_main_interface(self):
-        """Создание основного интерфейса"""
+        """
+        Создаёт основной интерфейс приложения: заголовок, карту, рекомендации, навигацию.
+        """
+        self.load_recommendations()
         main_content = ft.Row([
-            # Карта
             ft.Container(
                 content=self.create_map_section(),
                 expand=True
             ),
-            # Рекомендации
             self.create_recommendations_section()
         ], expand=True)
-
+        self.page.clean()  # очищаем предыдущий интерфейс
         self.page.add(
             ft.Column([
                 self.create_header(),
@@ -316,61 +430,47 @@ class CulturalApp:
             ], expand=True)
         )
 
-    # Обработчики событий
+    # === Обработчики событий ===
     def on_search_change(self, e):
-        """Обработчик изменения поиска"""
         print(f"Поиск: {e.control.value}")
 
     def open_filters(self, e):
-        """Открытие фильтров"""
         print("Открытие фильтров")
 
     def open_profile(self, e):
-        """Открытие профиля"""
         print("Открытие профиля")
 
     def on_nav_click(self, e, index):
-        """Обработчик клика по навигации"""
         print(f"Навигация: {index}")
-        # Обновляем активное состояние кнопок
         self.update_navigation_state(index)
 
     def update_navigation_state(self, active_index):
-        """Обновление состояния навигации"""
-        # В реальном приложении здесь будет логика переключения между экранами
         print(f"Активирована вкладка: {active_index}")
 
     def open_place_detail(self, place_id):
-        """Открытие деталей места"""
         print(f"Открытие места: {place_id}")
 
     def open_catalog(self, e):
-        """Открытие каталога"""
         print("Открытие каталога")
 
     def open_full_map(self, e):
-        """Открытие полной карты"""
         print("Открытие полной карты")
-        # Инициализация карты
-        map_api = self.initialize_map("map-container", {"center": [52.970756, 36.064358], "zoom": 12}) # МЕТКА ЦЕНТРА ОРЛА
-        # Пример добавления маркера
-        
+        # Имитация инициализации карты (в реальности — через WebView или Leaflet)
+        map_api = self.initialize_map("map-container", {"center": [52.970756, 36.064358], "zoom": 12})
+        # Пример добавления маркеров
         map_api['add_marker'](52.962197, 36.064894, "Памятник Н. С. Лескову")
         map_api['add_marker'](52.961665, 36.065917, "Памятник А. П. Ермолову")
-        map_api['add_marker'](52.967952, 36.064322, " Академический театр им. И.С. Тургенева")
+        map_api['add_marker'](52.967952, 36.064322, "Академический театр им. И.С. Тургенева")
         map_api['add_marker'](52.956389, 36.055278, "Гостиный Двор")
         map_api['add_marker'](52.96188, 36.06356, "Собор Михаила Архангела")
-        
-        # ЦЕНТРАЛЬНЫЙ МАРКЕР 
-        
+        # Установка центра карты
         map_api['set_center'](52.970756, 36.064358)
 
-
-  # --- Добавим Python-аналоги JS-функций ---
+    # === Python-аналоги JS-функций (заглушки) ===
     def initialize_map(self, container_id, options=None):
         """
-        Инициализация карты (пока просто заглушка)
-        В реальности тут будет интеграция с картой (WebView, Leaflet, и т.д.)
+        Имитация инициализации карты.
+        В реальном приложении — интеграция с Leaflet, Google Maps и т.д.
         """
         print(f'Initializing map in: {container_id}')
         return {
@@ -380,17 +480,21 @@ class CulturalApp:
 
     def add_marker(self, lat, lng, title):
         print(f'Adding marker: {lat}, {lng}, {title}')
-        # Здесь в будущем можно обновлять UI или отправлять в API
 
     def set_center(self, lat, lng):
         print(f'Setting center: {lat}, {lng}')
 
+    # === Асинхронные методы для запросов к API ===
     async def fetch_recommendations(self):
         """
-        Асинхронный запрос к API за рекомендациями
+        Асинхронный запрос к API за рекомендациями.
+        Использует токен аутентификации, если он есть.
         """
+        headers = {}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
         try:
-            response = requests.get(f"{self.api_base_url}/recommendations")
+            response = requests.get(f"{self.api_base_url}/recommendations", headers=headers)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -399,7 +503,7 @@ class CulturalApp:
 
     async def search_places(self, query, filters=None):
         """
-        Асинхронный запрос к API для поиска мест
+        Асинхронный запрос к API для поиска мест.
         """
         try:
             payload = {"query": query, "filters": filters or {}}
@@ -410,53 +514,7 @@ class CulturalApp:
             print(f'Error searching places: {e}')
             return []
 
-
-# JavaScript функции для интеграции (для будущего использования)
-js_functions = """
-// Функции для работы с картами
-function initializeMap(containerId, options) {
-    // Инициализация карты
-    console.log('Initializing map in:', containerId);
-    return {
-        addMarker: function(lat, lng, title) {
-            console.log('Adding marker:', lat, lng, title);
-        },
-        setCenter: function(lat, lng) {
-            console.log('Setting center:', lat, lng);
-        }
-    };
-}
-
-// Функции для работы с API
-async function fetchRecommendations() {
-    try {
-        const response = await fetch('/api/recommendations');
-        return await response.json();
-    } catch (error) {
-        console.error('Error fetching recommendations:', error);
-        return [];
-    }
-}
-
-async function searchPlaces(query, filters) {
-    try {
-        const response = await fetch('/api/search', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ query, filters })
-        });
-        return await response.json();
-    } catch (error) {
-        console.error('Error searching places:', error);
-        return [];
-    }
-}
-"""
-
-# Запуск приложения
+# === Запуск приложения ===
 if __name__ == "__main__":
     app = CulturalApp()
-
     ft.app(target=app.main)
