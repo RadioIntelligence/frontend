@@ -1,0 +1,44 @@
+name: "Культурный гид"
+description: "Гид по достопримечательностям и событиям"
+publish_to: "none"
+
+version: "1.0.0"
+release: "1.0.0"
+
+build: "build"
+
+icons:
+  - "assets/icon.png"
+
+splash:
+  color: "0D47A1"
+
+android:
+  package_name: "com.culturalguide.app"
+  min_sdk_version: 21
+  target_sdk_version: 34
+  compile_sdk_version: 34
+
+  permissions:
+    - "android.permission.INTERNET"
+    - "android.permission.ACCESS_NETWORK_STATE"
+    # Уберите LOCATION permissions если не используете геолокацию
+    # - "android.permission.ACCESS_COARSE_LOCATION"
+    # - "android.permission.ACCESS_FINE_LOCATION"
+
+  # Настройки для уменьшения размера
+  enable_rust_shared_libraries: false
+  enable_gradle_daemon: true
+  
+  # Включить R8 для минификации (аналог ProGuard)
+  build_config:
+    - "-Pandroid.enableR8=true"
+    - "-Pandroid.bundle.enableUncompressedNativeLibs=false"
+
+python:
+  version: "3.12.3"
+
+# Оптимизации размера
+include_packages:
+  - "aiohttp"
+  - "certifi"

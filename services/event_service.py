@@ -112,9 +112,19 @@ class EventsService:
         """Получение изображения для события"""
         if not event_name:
             return "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=300&fit=crop"
-            
+        if event_name == "Цирк с симфоническим оркестром":
+            return 'https://xn--e1aaodlcdmgu5b.xn--p1ai/assets/uploads/posters/2660.jpg'
+        if event_name == 'Цирк "Водное шоу"':
+            return 'https://1afisha.ru/image/cache/catalog/product/orel/cloud/_______________________oktyabr___________________/tsirk_vodnoe_shou_holodnoe_serdtse_-_chast_3_anna_i_elza/685922e9c04f146fa4d1d50c_1-620x400.jpg'
+        if event_name == 'Дом ада. Спуск к дьяволу':
+            return 'https://avatars.mds.yandex.net/get-kinopoisk-image/10703859/2919a915-5c7d-4832-8bb3-ad15036dd216/600x900'
+        if event_name == 'Дракула':
+            return 'https://upload.wikimedia.org/wikipedia/ru/thumb/f/f5/%D0%94%D1%80%D0%B0%D0%BA%D1%83%D0%BB%D0%B0_%28%D1%84%D0%B8%D0%BB%D1%8C%D0%BC%2C_2025%29.jpg/500px-%D0%94%D1%80%D0%B0%D0%BA%D1%83%D0%BB%D0%B0_%28%D1%84%D0%B8%D0%BB%D1%8C%D0%BC%2C_2025%29.jpg?20250817220859'
+        
         event_name_lower = event_name.lower()
         
+        
+
         image_mapping = {
             'концерт': 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=300&fit=crop',
             'выставка': 'https://images.unsplash.com/photo-1563089145-599997674d42?w=400&h=300&fit=crop',
@@ -133,7 +143,7 @@ class EventsService:
                 return image_url
         
         # Дефолтное изображение
-        return "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&h=300&fit=crop"
+        return "https://infoorel.ru/user_foto/afisha/03d317ded260bb22b3a64c5b79e0d6a3.jpeg"
     
     def should_update_events(self) -> bool:
         """Проверка необходимости обновления событий"""
