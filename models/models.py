@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional
+from datetime import datetime, timedelta
 
 @dataclass
 class Place:
@@ -30,6 +31,8 @@ class Event:
     duration: str
     created_at: str
     image: str
+    api_id: Optional[int] = None
+    last_updated: Optional[datetime] = None
 
 @dataclass
 class UserProfile:

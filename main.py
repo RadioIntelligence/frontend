@@ -1,4 +1,5 @@
 import flet as ft
+import asyncio
 from models.data_loader import load_places, load_events
 from views.map_view import MapView
 from views.catalog_view import CatalogView
@@ -9,6 +10,7 @@ from views.auth_view import AuthView
 from views.profile_view import ProfileView
 from services.auth_service import AuthService
 from services.map_service import MapService
+from services.event_service import EventsService
 from models.models import Place, Event
 
 class CulturalApp:
@@ -20,15 +22,17 @@ class CulturalApp:
         self.current_place = None
         self.current_event = None
         self.full_screen_map = False
+        self._auto_update_task = None
         
         # Инициализация сервисов
         self.auth_service = AuthService()
         self.map_service = MapService()
+        self.events_service = EventsService(auth_service=self.auth_service)
         
         # Инициализация вьюшек
         self.auth_view = AuthView(
             auth_service=self.auth_service,
-            on_login_success=self.on_login_success,
+            on_login_success=self.on_login_success,  # Теперь это асинхронный метод
             on_show_register=self.show_register_screen,
             on_show_login=self.show_login_screen
         )
@@ -50,7 +54,7 @@ class CulturalApp:
         self.favorites_view = FavoritesView()
         self.routes_view = RoutesView()
 
-    def main(self, page: ft.Page):
+    async def main(self, page: ft.Page):
         self.page = page
         page.title = "Культурный гид"
         page.theme_mode = ft.ThemeMode.LIGHT
@@ -68,9 +72,12 @@ class CulturalApp:
 
         # Проверка аутентификации
         if self.auth_service.is_authenticated():
-            self.load_data()
+            await self.load_data()
             self.create_main_interface()
             self.switch_view("map")
+            
+            # Запуск автоматического обновления событий
+            self._auto_update_task = asyncio.create_task(self.start_events_auto_update())
         else:
             self.show_login_screen()
 
@@ -90,16 +97,67 @@ class CulturalApp:
         self.page.add(register_view)
         self.page.update()
 
-    def on_login_success(self):
-        """Обработчик успешного входа"""
-        self.load_data()
+    async def on_login_success(self):
+        """Обработчик успешного входа (теперь асинхронный)"""
+        await self.load_data()
         self.create_main_interface()
         self.switch_view("map")
+        
+        # Запуск автоматического обновления после входа
+        if self._auto_update_task:
+            self._auto_update_task.cancel()
+        self._auto_update_task = asyncio.create_task(self.start_events_auto_update())
 
-    def load_data(self):
-        """Загрузка данных"""
+    async def load_data(self):
+        """Асинхронная загрузка данных"""
+        # Загружаем места из локальных данных
         self.places = load_places()
-        self.events = load_events()
+        
+        try:
+            # Пытаемся загрузить события с API
+            self.events = await self.events_service.fetch_events_from_api()
+            if not self.events:
+                # Fallback на мок-данные
+                self.events = load_events()
+                print("Используются локальные данные событий")
+            else:
+                print(f"Загружено {len(self.events)} событий с API")
+        except Exception as e:
+            print(f"Ошибка загрузки событий с API: {e}")
+            self.events = load_events()
+            print("Используются локальные данные событий")
+
+    async def start_events_auto_update(self):
+        """Запуск автоматического обновления событий"""
+        try:
+            await self.events_service.start_auto_update(self.update_events_callback)
+        except asyncio.CancelledError:
+            print("Автообновление событий остановлено")
+        except Exception as e:
+            print(f"Ошибка в автообновлении событий: {e}")
+
+    def update_events_callback(self, new_events: list):
+        """Колбэк для обновления событий в UI"""
+        if new_events:
+            self.events = new_events
+            
+            # Обновляем UI если текущий вид - события
+            if self.current_view == "events":
+                self.switch_view("events")
+            
+            # Показываем уведомление о обновлении
+            self.show_update_notification(f"Обновлено {len(new_events)} событий")
+
+    def show_update_notification(self, message: str):
+        """Показать уведомление об обновлении"""
+        if hasattr(self, 'page') and self.page:
+            self.page.show_snack_bar(
+                ft.SnackBar(
+                    content=ft.Text(message),
+                    action="OK",
+                    duration=3000
+                )
+            )
 
     def create_search_bar(self):
         """Создание поисковой строки"""
@@ -270,6 +328,140 @@ class CulturalApp:
             self.page.controls[0].controls[2] = self.create_navigation()
         self.page.update()
 
+    def create_place_detail_view(self, place: Place):
+        """Создание детального просмотра места"""
+        return ft.Column([
+            # Заголовок с кнопкой назад
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_BACK,
+                        on_click=lambda e: self.switch_view("catalog"),
+                        icon_size=24,
+                        style=ft.ButtonStyle(padding=ft.padding.all(8))
+                    ),
+                    ft.Text(place.title, size=18, weight=ft.FontWeight.BOLD, expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.FAVORITE_BORDER,
+                        on_click=lambda e: self.toggle_favorite(place.id),
+                        icon_size=24,
+                        style=ft.ButtonStyle(padding=ft.padding.all(8))
+                    )
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=ft.padding.symmetric(vertical=8, horizontal=12),
+                bgcolor=ft.Colors.WHITE,
+                border=ft.border.only(bottom=ft.BorderSide(color=ft.Colors.GREY_200, width=1))
+            ),
+            
+            # Контент с прокруткой
+            ft.Container(
+                content=self.create_place_detail_content(place),
+                expand=True
+            )
+        ])
+
+    def create_place_detail_content(self, place: Place):
+        """Создание содержимого детальной страницы"""
+        return ft.ListView(
+            controls=[
+                # Изображение
+                ft.Container(
+                    content=ft.Image(
+                        src=place.image,
+                        fit=ft.ImageFit.COVER,
+                        width=float("inf"),
+                        height=250,
+                    ),
+                    alignment=ft.alignment.center,
+                    bgcolor=ft.Colors.GREY_300,
+                    border_radius=12,
+                    height=250,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE
+                ),
+                
+                # Основная информация
+                ft.Container(
+                    content=ft.Column([
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.CATEGORY, size=20),
+                            title=ft.Text("Тип", size=12, color=ft.Colors.GREY_600),
+                            subtitle=ft.Text(place.type, size=14)
+                        ),
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.STAR, size=20),
+                            title=ft.Text("Рейтинг", size=12, color=ft.Colors.GREY_600),
+                            subtitle=ft.Text(f"{place.rating} ⭐", size=14)
+                        ),
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.LOCATION_ON, size=20),
+                            title=ft.Text("Адрес", size=12, color=ft.Colors.GREY_600),
+                            subtitle=ft.Text(place.address, size=14)
+                        ),
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.ACCESS_TIME, size=20),
+                            title=ft.Text("Время работы", size=12, color=ft.Colors.GREY_600),
+                            subtitle=ft.Text(place.working_hours, size=14)
+                        ),
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.ATTACH_MONEY, size=20),
+                            title=ft.Text("Стоимость", size=12, color=ft.Colors.GREY_600),
+                            subtitle=ft.Text(place.price, size=14)
+                        ),
+                    ], spacing=0),
+                    padding=ft.padding.symmetric(vertical=8)
+                ),
+                
+                # Описание
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Описание", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_800),
+                        ft.Container(height=8),
+                        ft.Text(place.description, size=14, color=ft.Colors.GREY_700)
+                    ]),
+                    padding=16,
+                    bgcolor=ft.Colors.GREY_50
+                ),
+                
+                # Контакты
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("Контакты", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_800),
+                        ft.Container(height=12),
+                        ft.Row([
+                            ft.Icon(ft.Icons.PHONE, size=18, color=ft.Colors.GREY_600),
+                            ft.Container(width=12),
+                            ft.Text(place.phone, size=14, expand=True)
+                        ]),
+                        ft.Container(height=8),
+                        ft.Row([
+                            ft.Icon(ft.Icons.LANGUAGE, size=18, color=ft.Colors.GREY_600),
+                            ft.Container(width=12),
+                            ft.Text(place.website, size=14, expand=True)
+                        ])
+                    ]),
+                    padding=16
+                ),
+                
+                # Кнопки действий
+                ft.Container(
+                    content=ft.Row([
+                        ft.FilledButton(
+                            "Построить маршрут",
+                            icon=ft.Icons.DIRECTIONS,
+                            on_click=lambda e: self.build_route(place),
+                            expand=True,
+                            style=ft.ButtonStyle(padding=ft.padding.symmetric(vertical=16))
+                        ),
+                    ]),
+                    padding=16
+                ),
+                
+                ft.Container(height=20)
+            ],
+            spacing=0,
+            padding=0
+        )
+
     def open_profile(self, e):
         """Открытие страницы профиля"""
         self.switch_view("profile")
@@ -280,6 +472,10 @@ class CulturalApp:
 
     def logout(self, e=None):
         """Выход из системы"""
+        # Останавливаем автообновление
+        if self._auto_update_task:
+            self._auto_update_task.cancel()
+            
         self.auth_service.logout()
         self.show_login_screen()
 
@@ -287,8 +483,6 @@ class CulturalApp:
         """Переключение режима полноэкранной карты"""
         self.full_screen_map = not self.full_screen_map
         self.switch_view("map")
-
-    # ... остальные методы (create_place_detail_view, обработчики событий) ...
 
     def on_nav_click(self, e, view):
         """Обработчик клика по навигации"""
@@ -316,6 +510,14 @@ class CulturalApp:
     def build_route(self, place):
         print(f"Построение маршрута к: {place.title}")
 
+    def cleanup(self):
+        """Очистка ресурсов при закрытии приложения"""
+        if self._auto_update_task:
+            self._auto_update_task.cancel()
+
 if __name__ == "__main__":
     app = CulturalApp()
-    ft.app(target=app.main, view=ft.AppView.FLET_APP)
+    try:
+        ft.app(target=app.main, view=ft.AppView.FLET_APP)
+    finally:
+        app.cleanup()

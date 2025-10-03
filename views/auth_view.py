@@ -55,7 +55,7 @@ class AuthView:
         )
         status_text = ft.Text("", color=ft.Colors.RED)
 
-        def on_login_click(e):
+        async def on_login_click(e):
             username = username_field.value.strip()
             password = password_field.value
             
@@ -71,11 +71,14 @@ class AuthView:
                 status_text.value = "Успешный вход!"
                 status_text.color = ft.Colors.GREEN
                 status_text.update()
+                
                 # Задержка для отображения сообщения об успехе
-                import time
-                time.sleep(0.5)
+                import asyncio
+                await asyncio.sleep(0.5)
+                
                 if self.on_login_success:
-                    self.on_login_success()
+                    # Вызываем асинхронный колбэк
+                    await self.on_login_success()
             else:
                 status_text.value = message
                 status_text.color = ft.Colors.RED
@@ -93,7 +96,7 @@ class AuthView:
                 ft.Container(height=10),
                 ft.ElevatedButton(
                     "Войти",
-                    on_click=on_login_click,
+                    on_click=on_login_click,  # Теперь это асинхронная функция
                     width=300,
                     height=45
                 ),
@@ -134,7 +137,7 @@ class AuthView:
         )
         status_text = ft.Text("", color=ft.Colors.RED)
 
-        def on_register_click(e):
+        async def on_register_click(e):
             username = username_field.value.strip()
             email = email_field.value.strip()
             password = password_field.value
@@ -166,12 +169,13 @@ class AuthView:
                 status_text.value = "Успешная регистрация! Автоматический вход..."
                 status_text.color = ft.Colors.GREEN
                 status_text.update()
+                
                 # Автоматический вход после регистрации
                 success_login, message_login = self.auth_service.login(username, password)
                 if success_login and self.on_login_success:
-                    import time
-                    time.sleep(0.5)
-                    self.on_login_success()
+                    import asyncio
+                    await asyncio.sleep(0.5)
+                    await self.on_login_success()
                 elif self.on_show_login:
                     status_text.value = "Регистрация успешна! Теперь войдите в систему"
                     status_text.update()
@@ -194,7 +198,7 @@ class AuthView:
                 ft.Container(height=10),
                 ft.ElevatedButton(
                     "Зарегистрироваться",
-                    on_click=on_register_click,
+                    on_click=on_register_click,  # Теперь это асинхронная функция
                     width=300,
                     height=45
                 ),
